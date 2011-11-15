@@ -3,6 +3,9 @@
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
+// Sum of digits when index is doubled. e.g. 6 doubled = 12, 1+2 = 3, so _luhnSums[6] = 3.
+$_doubleSums = array(0, 2, 4, 6, 8, 1, 3, 5, 7, 9);
+
 /**
  * Checks to see if a number passes the Luhn check.
  *
@@ -11,6 +14,8 @@
  */
 function luhn($s)
 {
+    global $_doubleSums;
+
     $len = strlen($s);
     $sum = 0;
 
@@ -20,17 +25,8 @@ function luhn($s)
     // Move right to left, but do count from 0 since I need to get odd/even from right.
     for ($i = 1; $i <= $len; $i++)
     {
-        // Double every second character and sum the digits before adding to total.
-        if ($i % 2 == 0)
-        {
-            // Don't want to do the array_sum/str_split calls to sum the digits unless I have to.
-            $v = $s[$len-$i] * 2;
-            $sum += ($v < 10) ? $v : array_sum(str_split($v));
-            continue;
-        }
-
-        // Otherwise just add the number to the total
-        $sum += $s[$len-$i];
+        // Add digit if odd, or double digit using lookup if even.
+        $sum += ($i % 2 == 0) ? $_doubleSums[$s[$len-$i]] : $s[$len-$i];
     }
 
     // If sum is divisible by 10 then luhn check passes

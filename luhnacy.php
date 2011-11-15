@@ -20,10 +20,12 @@ function luhn($s)
     // Move right to left, but do count from 0 since I need to get odd/even from right.
     for ($i = 1; $i <= $len; $i++)
     {
-        // Double every second character and sum the digits before adding to total
+        // Double every second character and sum the digits before adding to total.
         if ($i % 2 == 0)
         {
-            $sum += array_sum(str_split(($s[$len-$i] * 2)));
+            // Don't want to do the array_sum/str_split calls to sum the digits unless I have to.
+            $v = $s[$len-$i] * 2;
+            $sum += ($v < 10) ? $v : array_sum(str_split($v));
             continue;
         }
 
@@ -44,43 +46,38 @@ $_validChars = str_split("1234567890- "); // Characters that could be part of a 
 define("MIN_LENGTH", 14); // Min length of any credit card number expected.
 define("MAX_LENGTH", 16); // Max length "   "   "
 
-$check_mode   = false; // A flag to determine if I need to buffer the output.
-$check_buffer = "";    // Will keep just the digits for easy luhn checking, rolling window of 16 chars.
-$full_buffer  = "";    // Keeps the raw input, so I can go back and mask any luhn check passing chars.
-$matched      = "";    // The part of the check_buffer which matched the luhn check.
+$check_buffer = ""; // Will keep just the digits for easy luhn checking, rolling window of 16 chars.
+$full_buffer  = ""; // Keeps the raw input, so I can go back and mask any luhn check passing chars.
+$matched      = ""; // The part of the check_buffer which matched the luhn check.
 
 while (!feof($in))
 {
     // Read one character at a time.
     $char = fgetc($in);
 
-    // If the character is one we need to look out for then go into check mode.
-    if (!$check_mode && in_array($char, $_validChars))
+    // If the character isn't one we care about, then flush any buffers and write it out.
+    if (!in_array($char, $_validChars))
     {
-        $check_mode = true;
+        // If there's a buffer to flush, flush it
+        if ($full_buffer != "")
+        {
+            fwrite($out, $full_buffer);
+
+            // Reset buffers
+            $full_buffer  = "";
+            $check_buffer = "";
+            $matched      = "";
+        }
+
+        // Write the char straight back out.
+        fwrite($out, $char);
     }
-
-    // Add to the full buffer if we're in check mode
-    if ($check_mode) { $full_buffer .= $char; }
-
-    // If in check mode, but the next character isn't one we care about, then leave check mode
-    // and flush buffers.
-    if ($check_mode && !in_array($char, $_validChars))
+    else // The character is one we need to look out for.
     {
-        fwrite($out, $full_buffer);
+        // Add the char to the buffer
+        $full_buffer .= $char;
 
-        // Reset
-        $full_buffer  = "";
-        $check_buffer = "";
-        $matched      = "";
-        $check_mode   = false;
-
-        continue;
-    }
-
-    if ($check_mode)
-    {
-        // If character is numeric, add it to the check buffer.
+        // If character is numeric, also add it to the check buffer.
         if (is_numeric($char)) { $check_buffer .= $char; }
 
         // If more than max chars in check buffer, remove front values to keep it within max length
@@ -93,7 +90,7 @@ while (!feof($in))
         if (strlen($check_buffer) >= MIN_LENGTH)
         {
             // Check all min-max digit sub-strings since credit card could be surrounded by valid numbers.
-            // Do max first to match longer ones before sub-matches.
+            // Do max first to match longer ones before any sub-matches.
             for ($i = 0; $i <= strlen($check_buffer) - MIN_LENGTH; $i++)
             {
                 $to_check = substr($check_buffer, 0, MAX_LENGTH);
@@ -102,10 +99,6 @@ while (!feof($in))
                     if (luhn($to_check)) { $matched = $to_check; break 2; }
                     $to_check = substr($to_check, $i, -1);
                 }
-
-                //if (luhn(substr($check_buffer, $i, 16))) { $matched = substr($check_buffer, $i, 16); break; }
-                //if (luhn(substr($check_buffer, $i, 15))) { $matched = substr($check_buffer, $i, 15); break; }
-                //if (luhn(substr($check_buffer, $i, 14))) { $matched = substr($check_buffer, $i, 14); break; }
             }
         }
 
@@ -134,12 +127,7 @@ while (!feof($in))
             // Reset vars
             $matched = "";
         }
-
-        continue;
     }
-
-    // If we get to here, then it wasn't a character that is cared about. Write it straight back out.
-    fwrite($out, $char);
 }
 
 // Finally, close all streams and do any tidyup.

@@ -38,8 +38,7 @@ $out = fopen("php://stdout", "a");
 $checkChars = str_split("1234567890- ");
 
 $check_mode   = false; // A flag to determine if I need to buffer the output.
-$mask         = false; // A flag to determine if something needs to be masked.
-$check_buffer = "";    // Will keep just the digits for easy luhn checking
+$check_buffer = "";    // Will keep just the digits for easy luhn checking, rolling window of 16 chars.
 $full_buffer  = "";    // Keeps the raw input, so I can go back and mask any luhn check passing chars.
 $matched      = "";    // The part of the check_buffer which matched the luhn check.
 
@@ -57,24 +56,9 @@ while (!feof($in))
     // Add to the full buffer if we're in check mode
     if ($check_mode) { $full_buffer .= $char; }
 
-    // If in check mode, but the next character isn't one we care about, then leave check and
-    // flush buffers. Remembering to mask anything that needs to be masked.
+    // If in check mode, but the next character isn't one we care about, then leave check and flush buffers.
     if ($check_mode && !in_array($char, $checkChars))
     {
-        if ($mask)
-        {
-            // Go over the check_buffer, replacing each number with an X in the full buffer.
-            // TODO what about overlapping values?
-            for ($i = 0; $i < strlen($full_buffer); $i++)
-            {
-                if ($full_buffer[$i] == $matched[0])
-                {
-                    $full_buffer[$i] = "X";
-                    $matched = substr($matched, 1);
-                }
-            }
-        }
-
         fwrite($out, $full_buffer);
 
         // Reset
@@ -92,6 +76,9 @@ while (!feof($in))
         // If it's numeric, add it to the check buffer.
         if (is_numeric($char)) { $check_buffer .= $char; }
 
+        // If more than 16 chars in check buffer, remove front numbers
+        if (strlen($check_buffer) > 16) { $check_buffer = substr($check_buffer, strlen($check_buffer) - 16); }
+
         // If there are 14 or more integers in the check buffer, it's a potential credit card number
         if (strlen($check_buffer) >= 14)
         {
@@ -99,29 +86,37 @@ while (!feof($in))
             for ($i = 0; $i <= strlen($check_buffer)-14; $i++)
             {
                 // Do 16 first to match longer ones before sub-matches.
-                if (luhn(substr($check_buffer, $i, 16))) { $mask = true; $matched = substr($check_buffer, $i, 16); break; }
-                if (luhn(substr($check_buffer, $i, 15))) { $mask = true; $matched = substr($check_buffer, $i, 15); break; }
-                if (luhn(substr($check_buffer, $i, 14))) { $mask = true; $matched = substr($check_buffer, $i, 14); break; }
+                if (luhn(substr($check_buffer, $i, 16))) { $matched = substr($check_buffer, $i, 16); break; }
+                if (luhn(substr($check_buffer, $i, 15))) { $matched = substr($check_buffer, $i, 15); break; }
+                if (luhn(substr($check_buffer, $i, 14))) { $matched = substr($check_buffer, $i, 14); break; }
             }
+        }
 
-            // If matched, then mask from full_buffer.
-            // TODO Repeating code, should change the logic so I don't do that.
-            if (strlen($matched) == 16 && $mask)
+        // If matched, then mask from full_buffer.
+        if ($matched != "")
+        {
+            // Go over the check_buffer, replacing each number with an X in the full buffer.
+            // Work backwards to account for overlapping values.
+            $pos = strlen($matched) - 1;
+            for ($i = strlen($full_buffer) - 1; $i >= 0; $i--)
             {
-                // Go over the check_buffer, replacing each number with an X in the full buffer.
-                for ($i = 0; $i < strlen($full_buffer); $i++)
-                {
-                    if ($full_buffer[$i] == $matched[0])
-                    {
-                        $full_buffer[$i] = "X";
-                        $matched = substr($matched, 1);
-                    }
-                }
+                // Skip over any already masked values.
+                if ($full_buffer[$i] == "X") { $pos--; continue; }
 
-                // Reset vars
-                $mask = false;
-                $matched = "";
+                // End of matched value, so we're done.
+                if ($pos == -1) { break; }
+
+                // If it matches the expected value, mask it.
+                if ($full_buffer[$i] == $matched[$pos])
+                {
+                    $full_buffer[$i] = "X";
+                    $matched = substr($matched, 0, $pos);
+                    $pos--;
+                }
             }
+
+            // Reset vars
+            $matched = "";
         }
 
         continue;

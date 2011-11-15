@@ -3,7 +3,7 @@
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
-// Sum of digits when index is doubled. e.g. 6 doubled = 12, 1+2 = 3, so _luhnSums[6] = 3.
+// Sum of digits when index is doubled. e.g. 6 doubled = 12, 1+2 = 3, so _doubleSums[6] = 3.
 $_doubleSums = array(0, 2, 4, 6, 8, 1, 3, 5, 7, 9);
 
 /**

@@ -3,7 +3,12 @@
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
-// Luhn check, returns boolean.
+/**
+ * Checks to see if a number passes the Luhn check.
+ *
+ * @param  string $s The string to check
+ * @return boolean
+ */
 function luhn($s)
 {
     $len = strlen($s);
@@ -12,10 +17,10 @@ function luhn($s)
     // If empty, then fail.
     if ($len == 0) { return false; }
 
-    // Move right to left, but do reverse counting since I need to get odd/even from right.
+    // Move right to left, but do count from 0 since I need to get odd/even from right.
     for ($i = 1; $i <= $len; $i++)
     {
-        // Double every second digit and sun the individual digits before adding to total
+        // Double every second character and sum the digits before adding to total
         if ($i % 2 == 0)
         {
             $sum += array_sum(str_split(($s[$len-$i] * 2)));
@@ -26,7 +31,7 @@ function luhn($s)
         $sum += $s[$len-$i];
     }
 
-    // If divisible by 10 then luhn check pass
+    // If sum is divisible by 10 then luhn check passes
     return ($sum % 10 == 0);
 }
 
@@ -35,7 +40,9 @@ function luhn($s)
 $in  = fopen("php://stdin", "r");
 $out = fopen("php://stdout", "a");
 
-$checkChars = str_split("1234567890- ");
+$_validChars = str_split("1234567890- "); // Characters that could be part of a credit card number.
+define("MIN_LENGTH", 14); // Min length of any credit card number expected.
+define("MAX_LENGTH", 16); // Max length "   "   "
 
 $check_mode   = false; // A flag to determine if I need to buffer the output.
 $check_buffer = "";    // Will keep just the digits for easy luhn checking, rolling window of 16 chars.
@@ -48,7 +55,7 @@ while (!feof($in))
     $char = fgetc($in);
 
     // If the character is one we need to look out for then go into check mode.
-    if (!$check_mode && in_array($char, $checkChars))
+    if (!$check_mode && in_array($char, $_validChars))
     {
         $check_mode = true;
     }
@@ -56,8 +63,9 @@ while (!feof($in))
     // Add to the full buffer if we're in check mode
     if ($check_mode) { $full_buffer .= $char; }
 
-    // If in check mode, but the next character isn't one we care about, then leave check and flush buffers.
-    if ($check_mode && !in_array($char, $checkChars))
+    // If in check mode, but the next character isn't one we care about, then leave check mode
+    // and flush buffers.
+    if ($check_mode && !in_array($char, $_validChars))
     {
         fwrite($out, $full_buffer);
 
@@ -66,29 +74,38 @@ while (!feof($in))
         $check_buffer = "";
         $matched      = "";
         $check_mode   = false;
-        $mask         = false;
 
         continue;
     }
 
     if ($check_mode)
     {
-        // If it's numeric, add it to the check buffer.
+        // If character is numeric, add it to the check buffer.
         if (is_numeric($char)) { $check_buffer .= $char; }
 
-        // If more than 16 chars in check buffer, remove front numbers
-        if (strlen($check_buffer) > 16) { $check_buffer = substr($check_buffer, strlen($check_buffer) - 16); }
-
-        // If there are 14 or more integers in the check buffer, it's a potential credit card number
-        if (strlen($check_buffer) >= 14)
+        // If more than max chars in check buffer, remove front values to keep it within max length
+        if (strlen($check_buffer) > MAX_LENGTH)
         {
-            // Check all 14-16 digit sub-strings since credit card could be surrounded by valid numbers.
-            for ($i = 0; $i <= strlen($check_buffer)-14; $i++)
+            $check_buffer = substr($check_buffer, strlen($check_buffer) - MAX_LENGTH);
+        }
+
+        // If there are more than min integers in the check buffer, it's a potential credit card number
+        if (strlen($check_buffer) >= MIN_LENGTH)
+        {
+            // Check all min-max digit sub-strings since credit card could be surrounded by valid numbers.
+            // Do max first to match longer ones before sub-matches.
+            for ($i = 0; $i <= strlen($check_buffer) - MIN_LENGTH; $i++)
             {
-                // Do 16 first to match longer ones before sub-matches.
-                if (luhn(substr($check_buffer, $i, 16))) { $matched = substr($check_buffer, $i, 16); break; }
-                if (luhn(substr($check_buffer, $i, 15))) { $matched = substr($check_buffer, $i, 15); break; }
-                if (luhn(substr($check_buffer, $i, 14))) { $matched = substr($check_buffer, $i, 14); break; }
+                $to_check = substr($check_buffer, 0, MAX_LENGTH);
+                while (strlen($to_check) >= MIN_LENGTH)
+                {
+                    if (luhn($to_check)) { $matched = $to_check; break 2; }
+                    $to_check = substr($to_check, $i, -1);
+                }
+
+                //if (luhn(substr($check_buffer, $i, 16))) { $matched = substr($check_buffer, $i, 16); break; }
+                //if (luhn(substr($check_buffer, $i, 15))) { $matched = substr($check_buffer, $i, 15); break; }
+                //if (luhn(substr($check_buffer, $i, 14))) { $matched = substr($check_buffer, $i, 14); break; }
             }
         }
 
@@ -98,13 +115,12 @@ while (!feof($in))
             // Go over the check_buffer, replacing each number with an X in the full buffer.
             // Work backwards to account for overlapping values.
             $pos = strlen($matched) - 1;
-            for ($i = strlen($full_buffer) - 1; $i >= 0; $i--)
+            for ($i = strlen($full_buffer) - 1;
+                 ($i >= 0) && ($pos != -1);
+                 $i--)
             {
                 // Skip over any already masked values.
                 if ($full_buffer[$i] == "X") { $pos--; continue; }
-
-                // End of matched value, so we're done.
-                if ($pos == -1) { break; }
 
                 // If it matches the expected value, mask it.
                 if ($full_buffer[$i] == $matched[$pos])

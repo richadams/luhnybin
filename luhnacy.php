@@ -89,7 +89,7 @@ while (!feof($in))
             // Do max first to match longer ones before any sub-matches.
             for ($i = 0; $i <= strlen($check_buffer) - MIN_LENGTH; $i++)
             {
-                $to_check = substr($check_buffer, 0, MAX_LENGTH);
+                $to_check = substr($check_buffer, $i, MAX_LENGTH);
                 while (strlen($to_check) >= MIN_LENGTH)
                 {
                     if (luhn($to_check)) { $matched = $to_check; break 2; }
